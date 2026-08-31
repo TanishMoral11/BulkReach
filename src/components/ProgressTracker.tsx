@@ -34,8 +34,8 @@ export const ProgressTracker: React.FC<ProgressTrackerProps> = ({ stats, current
         Progress & Live Analytics
       </h2>
 
-      {/* Grid Counters */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      {/* Grid Counters - 2 columns grid to perfectly fit narrow sidebar layout without overlapping */}
+      <div className="grid grid-cols-2 gap-4">
         <div className="bg-zinc-950 border border-zinc-850 rounded-xl p-4 flex flex-col justify-between">
           <span className="text-xs text-zinc-500 font-medium">Total URLs</span>
           <span className="text-2xl font-bold text-zinc-100 mt-2">{stats.total}</span>
@@ -54,7 +54,7 @@ export const ProgressTracker: React.FC<ProgressTrackerProps> = ({ stats, current
             {stats.successRate}%
           </span>
         </div>
-        <div className="bg-zinc-950 border border-zinc-850 rounded-xl p-4 flex flex-col justify-between col-span-2 md:col-span-1">
+        <div className="bg-zinc-950 border border-zinc-850 rounded-xl p-4 flex flex-col justify-between col-span-2">
           <span className="text-xs text-zinc-500 font-medium">Estimated Remaining</span>
           <span className="text-2xl font-bold text-blue-400 mt-2">{formatEta(stats.etaSeconds)}</span>
         </div>

@@ -58,7 +58,7 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({ results }) => {
           <button
             onClick={() => copyColumn(field)}
             title={`Copy all ${label}s`}
-            className="text-zinc-400 hover:text-blue-400 transition cursor-pointer flex items-center justify-center p-1 rounded hover:bg-zinc-800"
+            className="text-zinc-500 hover:text-zinc-300 transition opacity-60 hover:opacity-100 cursor-pointer"
           >
             {isCopied ? (
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 text-emerald-400">
@@ -81,10 +81,12 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({ results }) => {
     rowIdx: number,
     field: string,
     isLink = false,
-    linkHref = ''
+    linkHref = '',
+    copyText = ''
   ) => {
     if (!text) return <span className="text-zinc-650 font-normal">Not found</span>;
     const isCopied = copiedCell?.row === rowIdx && copiedCell?.field === field;
+    const finalCopyText = copyText || text;
 
     return (
       <div className="flex items-center gap-2 group/cell w-full justify-between">
@@ -103,8 +105,8 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({ results }) => {
           </span>
         )}
         <button
-          onClick={() => copyCell(text, rowIdx, field)}
-          title={`Copy this ${field}`}
+          onClick={() => copyCell(finalCopyText, rowIdx, field)}
+          title={`Copy this ${field === 'linkedinUrl' ? 'profile link' : field}`}
           className="text-zinc-600 hover:text-blue-400 transition opacity-0 group-hover/cell:opacity-100 focus:opacity-100 cursor-pointer shrink-0 flex items-center justify-center p-0.5 rounded hover:bg-zinc-800"
         >
           {isCopied ? (
@@ -159,9 +161,9 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({ results }) => {
             <tr className="border-b border-zinc-850 bg-zinc-900/50 text-zinc-400 font-semibold uppercase tracking-wider">
               <th className="py-3 px-4 w-12 text-center select-none">#</th>
               {renderHeader('Name', 'name')}
+              {renderHeader('Email', 'email')}
               {renderHeader('Company', 'company')}
               {renderHeader('Job Title', 'jobTitle')}
-              {renderHeader('Email', 'email')}
               {renderHeader('LinkedIn Profile', 'linkedinUrl')}
               <th className="py-3 px-4 text-right select-none w-24">Status</th>
             </tr>
@@ -173,20 +175,20 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({ results }) => {
                   <td className="py-3 px-4 text-center text-zinc-500 font-mono select-none border-r border-zinc-850/50">
                     {idx + 1}
                   </td>
-                  <td className="py-3 px-4 text-zinc-200 font-medium truncate max-w-[150px]">
+                  <td className="py-3 px-4 text-zinc-200 font-medium truncate max-w-[140px]">
                     {renderCellWithCopy(lead.name, idx, 'name')}
-                  </td>
-                  <td className="py-3 px-4 text-zinc-300 truncate max-w-[150px]">
-                    {renderCellWithCopy(lead.company, idx, 'company')}
-                  </td>
-                  <td className="py-3 px-4 text-zinc-300 truncate max-w-[180px]">
-                    {renderCellWithCopy(lead.jobTitle, idx, 'jobTitle')}
                   </td>
                   <td className="py-3 px-4 max-w-[220px]">
                     {renderCellWithCopy(lead.email, idx, 'email')}
                   </td>
-                  <td className="py-3 px-4 max-w-[220px]">
-                    {renderCellWithCopy(lead.linkedinUrl, idx, 'linkedinUrl', true, lead.linkedinUrl)}
+                  <td className="py-3 px-4 text-zinc-300 truncate max-w-[140px]">
+                    {renderCellWithCopy(lead.company, idx, 'company')}
+                  </td>
+                  <td className="py-3 px-4 text-zinc-300 truncate max-w-[160px]">
+                    {renderCellWithCopy(lead.jobTitle, idx, 'jobTitle')}
+                  </td>
+                  <td className="py-3 px-4 max-w-[100px]">
+                    {renderCellWithCopy('Profile', idx, 'linkedinUrl', true, lead.linkedinUrl, lead.linkedinUrl)}
                   </td>
                   <td className="py-3 px-4 text-right">
                     <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 select-none">
