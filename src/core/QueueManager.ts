@@ -146,8 +146,8 @@ export class QueueManager {
     const processed = completed + failed;
     const successRate = processed > 0 ? Math.round((completed / processed) * 1000) / 10 : 100;
     
-    // Average duration estimate: Spacing jitter is ~13.5s + navigation/processing is ~10s = ~24s per URL.
-    const averageTimePerUrlSeconds = 24;
+    // Average duration estimate: Spacing jitter is ~4s + navigation/processing is ~4s = ~8s per URL.
+    const averageTimePerUrlSeconds = 8;
     const etaSeconds = (this.state.status === 'RUNNING' || this.state.status === 'PAUSED') && remaining > 0 
       ? remaining * averageTimePerUrlSeconds 
       : null;

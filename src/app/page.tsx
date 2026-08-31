@@ -21,12 +21,37 @@ export default function Home() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   
   const processedUrlsRef = React.useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setMounted(true);
+    // Initialize theme from local storage if available
+    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark';
+    if (savedTheme) {
+      setTheme(savedTheme);
+      if (savedTheme === 'light') {
+        document.documentElement.classList.add('light');
+      } else {
+        document.documentElement.classList.remove('light');
+      }
+    } else {
+      // Default is dark
+      document.documentElement.classList.remove('light');
+    }
   }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    localStorage.setItem('theme', nextTheme);
+    if (nextTheme === 'light') {
+      document.documentElement.classList.add('light');
+    } else {
+      document.documentElement.classList.remove('light');
+    }
+  };
 
   const addToast = (message: string, type: 'success' | 'error' | 'warning' = 'error') => {
     const id = Math.random().toString(36).substring(2, 9);
@@ -123,7 +148,7 @@ export default function Home() {
 
   if (!mounted) {
     return (
-      <div className="min-h-screen bg-black text-zinc-100 pb-16">
+      <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] pb-16">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
           <div className="flex flex-col gap-6 animate-pulse">
             <div className="h-8 bg-zinc-900 rounded w-1/4"></div>
@@ -135,14 +160,14 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-zinc-100 selection:bg-indigo-500 selection:text-white pb-16">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] selection:bg-indigo-500 selection:text-white pb-16 transition-colors duration-300">
       {/* Background Decorative Gradients */}
       <div className="absolute top-0 left-1/4 w-[400px] h-[400px] bg-blue-500/10 rounded-full blur-[100px] -z-10" />
       <div className="absolute top-10 right-1/4 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -z-10" />
       <div className="absolute bottom-10 left-1/3 w-[350px] h-[350px] bg-violet-500/5 rounded-full blur-[90px] -z-10" />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
-        <DashboardHeader status={status} />
+        <DashboardHeader status={status} theme={theme} onToggleTheme={toggleTheme} />
 
         {/* Global Connection / Error Alerts */}
         {!isConnected && (
