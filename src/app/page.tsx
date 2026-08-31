@@ -1,69 +1,165 @@
-import Image from "next/image";
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { DashboardHeader } from '@/components/DashboardHeader';
+import { UrlInputArea } from '@/components/UrlInputArea';
+import { ControlPanel } from '@/components/ControlPanel';
+import { ExportPanel } from '@/components/ExportPanel';
+import { ProgressTracker } from '@/components/ProgressTracker';
+import { ResultsTable } from '@/components/ResultsTable';
+import { useQueueEvents } from '@/hooks/useQueueEvents';
 
 export default function Home() {
+  const { status, stats, currentUrl, results, isConnected } = useQueueEvents();
+  const [urlsToProcess, setUrlsToProcess] = useState<string[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const handleStart = async () => {
+    if (urlsToProcess.length === 0) return;
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch('/api/queue/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'START', urls: urlsToProcess })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setErrorMsg(data.error || 'Failed to start enrichment pipeline');
+      }
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Network error: failed to trigger queue start.');
+    }
+  };
+
+  const handlePause = async () => {
+    try {
+      await fetch('/api/queue/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'PAUSE' })
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleResume = async () => {
+    try {
+      await fetch('/api/queue/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'RESUME' })
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleStop = async () => {
+    try {
+      await fetch('/api/queue/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'STOP' })
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const isIdle = status === 'IDLE' || status === 'STOPPED' || status === 'COMPLETED';
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-black text-zinc-100 pb-16">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
+          <div className="flex flex-col gap-6 animate-pulse">
+            <div className="h-8 bg-zinc-900 rounded w-1/4"></div>
+            <div className="h-4 bg-zinc-950 rounded w-1/3"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+    <div className="min-h-screen bg-black text-zinc-100 selection:bg-indigo-500 selection:text-white pb-16">
+      {/* Background Decorative Gradients */}
+      <div className="absolute top-0 left-1/4 w-[400px] h-[400px] bg-blue-500/10 rounded-full blur-[100px] -z-10" />
+      <div className="absolute top-10 right-1/4 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[120px] -z-10" />
+      <div className="absolute bottom-10 left-1/3 w-[350px] h-[350px] bg-violet-500/5 rounded-full blur-[90px] -z-10" />
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
+        <DashboardHeader status={status} />
+
+        {/* Global Connection / Error Alerts */}
+        {!isConnected && (
+          <div className="mb-6 bg-amber-500/10 border border-amber-500/25 rounded-2xl p-4 flex items-center gap-3 text-sm text-amber-400">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 animate-pulse shrink-0">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+            </svg>
+            <span>Connection to local pipeline lost. Attempting to reconnect...</span>
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="mb-6 bg-rose-500/10 border border-rose-500/25 rounded-2xl p-4 flex items-center gap-3 text-sm text-rose-400">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 shrink-0">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+            </svg>
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        {/* Dashboard Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-8">
+          {/* Left Column: Inputs & Actions (7 cols) */}
+          <div className="lg:col-span-7 flex flex-col gap-8">
+            <UrlInputArea
+              onUrlsProcessed={setUrlsToProcess}
+              disabled={!isIdle}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            
+            <ControlPanel
+              status={status}
+              hasUrls={urlsToProcess.length > 0}
+              onStart={handleStart}
+              onPause={handlePause}
+              onResume={handleResume}
+              onStop={handleStop}
+            />
+
+            <ExportPanel
+              resultsCount={results.length}
+              failedCount={stats.failed}
+            />
+          </div>
+
+          {/* Right Column: Progress Analytics (5 cols) */}
+          <div className="lg:col-span-5">
+            <div className="sticky top-6">
+              <ProgressTracker
+                stats={stats}
+                currentUrl={currentUrl}
+                status={status}
+              />
+            </div>
+          </div>
         </div>
-      </main>
+
+        {/* Bottom Section: Live Grid View */}
+        <div className="w-full">
+          <ResultsTable results={results} />
+        </div>
+      </div>
     </div>
   );
 }
