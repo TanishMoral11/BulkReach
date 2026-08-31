@@ -9,50 +9,31 @@ export const UrlInputArea: React.FC<UrlInputAreaProps> = ({ onUrlsProcessed, dis
   const [text, setText] = useState('');
   const [stats, setStats] = useState({
     total: 0,
-    validCount: 0,
-    invalidCount: 0,
+    uniqueCount: 0,
     duplicatesCount: 0,
   });
-  const [invalidSamples, setInvalidSamples] = useState<string[]>([]);
-
-  const LINKEDIN_REGEX = /^https:\/\/(www\.)?linkedin\.com\/in\/[a-zA-Z0-9\-_%]+\/?$/i;
 
   useEffect(() => {
     if (!text.trim()) {
-      setStats({ total: 0, validCount: 0, invalidCount: 0, duplicatesCount: 0 });
-      setInvalidSamples([]);
+      setStats({ total: 0, uniqueCount: 0, duplicatesCount: 0 });
       onUrlsProcessed([]);
       return;
     }
 
     const lines = text.split('\n').map(line => line.trim());
     const nonKeys = lines.filter(line => line.length > 0);
-    
+
     // Deduplicate
     const uniqueLines = Array.from(new Set(nonKeys));
     const duplicates = nonKeys.length - uniqueLines.length;
 
-    // Validate
-    const valids: string[] = [];
-    const invalids: string[] = [];
-
-    uniqueLines.forEach(url => {
-      if (LINKEDIN_REGEX.test(url)) {
-        valids.push(url);
-      } else {
-        invalids.push(url);
-      }
-    });
-
     setStats({
       total: nonKeys.length,
-      validCount: valids.length,
-      invalidCount: invalids.length,
+      uniqueCount: uniqueLines.length,
       duplicatesCount: duplicates,
     });
 
-    setInvalidSamples(invalids.slice(0, 3)); // show first 3 invalid URLs as warnings
-    onUrlsProcessed(valids);
+    onUrlsProcessed(uniqueLines);
   }, [text]);
 
   return (
@@ -76,7 +57,7 @@ export const UrlInputArea: React.FC<UrlInputAreaProps> = ({ onUrlsProcessed, dis
       </div>
 
       {stats.total > 0 && (
-        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 bg-zinc-950 border border-zinc-850 rounded-xl p-3 text-xs">
+        <div className="mt-4 grid grid-cols-3 gap-3 bg-zinc-950 border border-zinc-850 rounded-xl p-3 text-xs">
           <div className="flex flex-col">
             <span className="text-zinc-500">Total pasted</span>
             <span className="text-zinc-200 font-bold mt-1 text-sm">{stats.total}</span>
@@ -86,26 +67,9 @@ export const UrlInputArea: React.FC<UrlInputAreaProps> = ({ onUrlsProcessed, dis
             <span className="text-amber-500 font-bold mt-1 text-sm">{stats.duplicatesCount}</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-zinc-500">Valid format</span>
-            <span className="text-emerald-500 font-bold mt-1 text-sm">{stats.validCount}</span>
+            <span className="text-zinc-500">URLs to process</span>
+            <span className="text-emerald-500 font-bold mt-1 text-sm">{stats.uniqueCount}</span>
           </div>
-          <div className="flex flex-col">
-            <span className="text-zinc-500">Malformed</span>
-            <span className={`${stats.invalidCount > 0 ? 'text-rose-500 font-bold' : 'text-zinc-500'} mt-1 text-sm`}>
-              {stats.invalidCount}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {invalidSamples.length > 0 && (
-        <div className="mt-3 bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 text-xs text-rose-400">
-          <p className="font-semibold mb-1">Malformed URL format warnings (e.g. must start with https://www.linkedin.com/in/):</p>
-          <ul className="list-disc pl-4 space-y-1">
-            {invalidSamples.map((sample, idx) => (
-              <li key={idx} className="truncate font-mono">{sample}</li>
-            ))}
-          </ul>
         </div>
       )}
     </div>

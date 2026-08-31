@@ -1,9 +1,9 @@
 export class RateLimiter {
   private requestTimestamps: number[] = [];
-  private readonly WINDOW_MS = 40000; // 40 seconds
-  private readonly MAX_REQUESTS = 3;
-  private readonly MIN_JITTER_MS = 12000; // 12 seconds
-  private readonly MAX_JITTER_MS = 15000; // 15 seconds
+  private readonly WINDOW_MS = 30000; // 30 seconds
+  private readonly MAX_REQUESTS = 10; // Max 10 requests per 30 seconds
+  private readonly MIN_JITTER_MS = 3000; // 3 seconds
+  private readonly MAX_JITTER_MS = 5000; // 5 seconds
   private lastRequestTime = 0;
 
   /**
@@ -12,7 +12,7 @@ export class RateLimiter {
   public async throttle(): Promise<void> {
     const now = Date.now();
 
-    // 1. Enforce operation spacing (12 - 15 seconds)
+    // 1. Enforce operation spacing (3 - 5 seconds)
     const timeSinceLast = now - this.lastRequestTime;
     const currentJitter = Math.floor(
       Math.random() * (this.MAX_JITTER_MS - this.MIN_JITTER_MS + 1) + this.MIN_JITTER_MS
@@ -54,7 +54,7 @@ export class RateLimiter {
   }
 
   /**
-   * Prunes request timestamps that fall outside the 40-second sliding window.
+   * Prunes request timestamps that fall outside the 30-second sliding window.
    */
   private cleanOldTimestamps(now: number): void {
     const threshold = now - this.WINDOW_MS;
