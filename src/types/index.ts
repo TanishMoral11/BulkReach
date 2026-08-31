@@ -5,6 +5,7 @@ export type JobStatus = 'pending' | 'processing' | 'success' | 'failed';
 export interface Lead {
   name: string | null;
   company: string | null;
+  jobTitle?: string | null;
   email: string | null;
   linkedinUrl: string;
   status: JobStatus;

@@ -9,15 +9,59 @@ import { ProgressTracker } from '@/components/ProgressTracker';
 import { ResultsTable } from '@/components/ResultsTable';
 import { useQueueEvents } from '@/hooks/useQueueEvents';
 
+interface Toast {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'warning';
+}
+
 export default function Home() {
   const { status, stats, currentUrl, results, isConnected } = useQueueEvents();
   const [urlsToProcess, setUrlsToProcess] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  
+  const processedUrlsRef = React.useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const addToast = (message: string, type: 'success' | 'error' | 'warning' = 'error') => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    results.forEach((lead) => {
+      if (!processedUrlsRef.current.has(lead.linkedinUrl)) {
+        processedUrlsRef.current.add(lead.linkedinUrl);
+
+        const isFailed = lead.status === 'failed';
+        const hasNoEmail = lead.status === 'success' && (!lead.email || lead.email.trim() === '');
+
+        if (isFailed || hasNoEmail) {
+          const urlSnippet = lead.linkedinUrl.split('/in/')[1]?.split('/')[0] || lead.linkedinUrl;
+          const decodedSnippet = decodeURIComponent(urlSnippet);
+          const msg = isFailed
+            ? `Failed to enrich: ${decodedSnippet} (${lead.error || 'Unknown error'})`
+            : `No email found for: ${decodedSnippet}`;
+          
+          addToast(msg, 'warning');
+        }
+      }
+    });
+
+    if (results.length === 0) {
+      processedUrlsRef.current.clear();
+    }
+  }, [results, mounted]);
 
   const handleStart = async () => {
     if (urlsToProcess.length === 0) return;
@@ -159,6 +203,27 @@ export default function Home() {
         <div className="w-full">
           <ResultsTable results={results} />
         </div>
+      </div>
+
+      {/* Toast Stack */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-sm w-full pointer-events-none">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className="pointer-events-auto bg-zinc-900/90 border border-zinc-800 rounded-xl px-4 py-3 shadow-2xl flex items-center gap-3 text-xs text-zinc-200 backdrop-blur-md transition-all duration-300 animate-in fade-in slide-in-from-bottom-5"
+          >
+            <span className="flex h-2 w-2 rounded-full bg-rose-500 shrink-0"></span>
+            <div className="flex-1 truncate pr-2 font-medium">{toast.message}</div>
+            <button
+              onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+              className="text-zinc-500 hover:text-zinc-300 transition shrink-0 cursor-pointer"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );

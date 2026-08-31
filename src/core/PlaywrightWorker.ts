@@ -102,12 +102,14 @@ export class PlaywrightWorker {
           if (nameText && !nameText.toLowerCase().includes('searching')) {
             const emailEl = card.querySelector('span.linkedin-email-finder__text.text-secondary');
             const companyImg = card.querySelector('span.position-text img.linkedin-email-finder-icon');
+            const positionEl = card.querySelector('span.position-text');
             
             return {
               success: true,
               name: nameText,
               email: emailEl ? emailEl.textContent?.trim() || null : null,
               company: companyImg ? companyImg.getAttribute('alt')?.trim() || null : null,
+              jobTitle: positionEl ? positionEl.textContent?.trim() || null : null,
               errorMsg: null
             };
           }
@@ -122,6 +124,7 @@ export class PlaywrightWorker {
           name: null,
           email: null,
           company: null,
+          jobTitle: null,
           errorMsg: errorText || 'Unknown error occurred'
         };
       }, { resultSelector, errorSelector });
@@ -130,6 +133,7 @@ export class PlaywrightWorker {
         return {
           name: extractedData.name,
           company: extractedData.company,
+          jobTitle: extractedData.jobTitle,
           email: extractedData.email,
           linkedinUrl: url,
           status: 'success',
@@ -147,6 +151,7 @@ export class PlaywrightWorker {
       return {
         name: null,
         company: null,
+        jobTitle: null,
         email: null,
         linkedinUrl: url,
         status: 'success', // Processed successfully but empty result
@@ -160,6 +165,7 @@ export class PlaywrightWorker {
       return {
         name: null,
         company: null,
+        jobTitle: null,
         email: null,
         linkedinUrl: url,
         status: 'failed',

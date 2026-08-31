@@ -258,6 +258,7 @@ export class QueueManager {
           await FileService.appendResult({
             name: null,
             company: null,
+            jobTitle: null,
             email: null,
             linkedinUrl: item.url,
             status: 'failed',

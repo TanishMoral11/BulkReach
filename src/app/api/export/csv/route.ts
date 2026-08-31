@@ -10,6 +10,7 @@ export async function GET() {
     const csvData = results.map(lead => ({
       'Name': lead.name || 'N/A',
       'Company': lead.company || 'N/A',
+      'Job Title': lead.jobTitle || 'N/A',
       'Email': lead.email || 'N/A',
       'LinkedIn URL': lead.linkedinUrl,
       'Status': lead.status === 'success' && lead.email ? 'Valid' : lead.status === 'success' ? 'No Email' : 'Failed',
