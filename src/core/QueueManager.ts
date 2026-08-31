@@ -146,10 +146,10 @@ export class QueueManager {
     const processed = completed + failed;
     const successRate = processed > 0 ? Math.round((completed / processed) * 1000) / 10 : 100;
     
-    // Average duration estimate: Spacing jitter is ~4s + navigation/processing is ~4s = ~8s per URL.
-    const averageTimePerUrlSeconds = 8;
+    // Average duration estimate: Spacing jitter is ~11s + navigation/processing is ~2s = ~13s per URL.
+    const averageTimePerUrlSeconds = 13;
     const etaSeconds = (this.state.status === 'RUNNING' || this.state.status === 'PAUSED') && remaining > 0 
-      ? remaining * averageTimePerUrlSeconds 
+      ? remaining * averageTimePerUrlSeconds
       : null;
 
     return {
@@ -186,7 +186,7 @@ export class QueueManager {
   }
 
   /**
-   * The core FIFO background processing loop.
+   * The core background processing loop (sequential single-tab execution).
    */
   private async processLoop(): Promise<void> {
     // Make sure worker browser is booted
@@ -208,7 +208,7 @@ export class QueueManager {
       item.lastAttempt = new Date().toISOString();
       await this.saveAndBroadcast();
 
-      // Enforce sliding-window rate limit
+      // Enforce rate limiter pacing rules
       try {
         await this.rateLimiter.throttle();
       } catch (err) {
@@ -223,7 +223,7 @@ export class QueueManager {
       }
 
       try {
-        // Execute lookup on Mailmeteor
+        // Execute lookup on Mailmeteor (using the persistent, cached tab)
         const lead = await this.worker.extractLead(item.url);
 
         if (lead.status === 'success') {
@@ -232,44 +232,66 @@ export class QueueManager {
           await FileService.appendResult(lead);
           this.state.currentIndex++;
         } else {
-          // Extraction returned status === 'failed'
-          item.retries++;
-          item.error = lead.error || 'Failed to extract';
+          // ── Failed extraction: check if it's a rate limit ──
+          const isRateLimit = lead.error === 'rate_limit';
 
-          if (item.retries >= 3) {
-            item.status = 'failed';
-            await FileService.appendResult(lead);
-            this.state.currentIndex++;
-          } else {
+          if (isRateLimit) {
+            // Rate limit: DON'T count toward retry cap — always retry after cooldown
             item.status = 'pending';
-            // Exponential Backoff Wait: 5s * (2^attempt) + random jitter up to 2s
-            const backoffMs = 5000 * Math.pow(2, item.retries) + Math.floor(Math.random() * 2000);
-            console.log(`QueueManager: Backoff wait for ${backoffMs}ms before retrying ${item.url}`);
-            await this.sleep(backoffMs);
+            const cooldownMs = 5000; // 5 seconds cooldown
+            console.log(`QueueManager: ⚠ RATE LIMIT hit for ${item.url}. Cooling down for ${cooldownMs / 1000}s before retry...`);
+            
+            // Also tell the rate limiter to slow down future requests
+            this.rateLimiter.penalize();
+            
+            await this.sleep(cooldownMs);
+          } else {
+            // Non-rate-limit failure: count toward retry cap
+            item.retries++;
+            item.error = lead.error || 'Failed to extract';
+
+            if (item.retries >= 3) {
+              item.status = 'failed';
+              await FileService.appendResult(lead);
+              this.state.currentIndex++;
+            } else {
+              item.status = 'pending';
+              const backoffMs = 5000;
+              console.log(`QueueManager: Retry wait ${backoffMs}ms before retrying ${item.url} (attempt ${item.retries}/3)`);
+              await this.sleep(backoffMs);
+            }
           }
         }
       } catch (err: any) {
         console.error(`QueueManager: Failed processing job ${item.url}:`, err);
-        item.retries++;
-        item.error = err.message || 'Unknown extraction error';
+        const errMsg = err.message || 'Unknown extraction error';
+        const isRateLimit = errMsg.toLowerCase().includes('rate_limit') || errMsg.toLowerCase().includes('rate limit');
 
-        if (item.retries >= 3) {
-          item.status = 'failed';
-          await FileService.appendResult({
-            name: null,
-            company: null,
-            jobTitle: null,
-            email: null,
-            linkedinUrl: item.url,
-            status: 'failed',
-            error: item.error,
-            processedAt: new Date().toISOString()
-          });
-          this.state.currentIndex++;
-        } else {
+        if (isRateLimit) {
           item.status = 'pending';
-          const backoffMs = 5000 * Math.pow(2, item.retries) + Math.floor(Math.random() * 2000);
-          await this.sleep(backoffMs);
+          const cooldownMs = 5000;
+          console.log(`QueueManager: ⚠ RATE LIMIT (exception) for ${item.url}. Cooling down for ${cooldownMs / 1000}s...`);
+          this.rateLimiter.penalize();
+          await this.sleep(cooldownMs);
+        } else {
+          item.retries++;
+          item.error = errMsg;
+
+          if (item.retries >= 3) {
+            item.status = 'failed';
+            await FileService.appendResult({
+              name: null, company: null, jobTitle: null, email: null,
+              linkedinUrl: item.url, status: 'failed',
+              error: item.error,
+              processedAt: new Date().toISOString()
+            });
+            this.state.currentIndex++;
+          } else {
+            item.status = 'pending';
+            const backoffMs = 5000;
+            console.log(`QueueManager: Error retry wait ${backoffMs}ms before retrying ${item.url} (attempt ${item.retries}/3)`);
+            await this.sleep(backoffMs);
+          }
         }
       }
 
@@ -323,7 +345,13 @@ const globalForQueue = global as unknown as {
   queueManager: QueueManager | undefined;
 };
 
-export const queueManager = globalForQueue.queueManager ?? new QueueManager();
+// In development, close the old singleton to shut down playwright context and avoid dangling pages/contexts
+if (process.env.NODE_ENV !== 'production' && globalForQueue.queueManager) {
+  console.log('QueueManager: Dev reload detected. Cleaning up previous context...');
+  globalForQueue.queueManager.stopQueue().catch(() => {});
+}
+
+export const queueManager = new QueueManager();
 
 if (process.env.NODE_ENV !== 'production') {
   globalForQueue.queueManager = queueManager;

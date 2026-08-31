@@ -1,9 +1,31 @@
-import { chromium, BrowserContext } from 'playwright';
+import { chromium, BrowserContext, Page } from 'playwright';
 import path from 'path';
 import { Lead } from '../types';
 
+// Patterns that indicate the extracted "name" is actually an error message, not a real person
+const ERROR_NAME_PATTERNS = [
+  'oops',
+  "didn't work",
+  'rate_limit',
+  'rate limit',
+  'unexpected error',
+  'try again',
+  'something went wrong',
+  'error occurred',
+  'blocked',
+  'captcha',
+  'turnstile',
+];
+
+// Patterns that mean "no email exists for this profile" — legitimate, don't retry
+const NO_DATA_PATTERNS = [
+  'no results found',
+  'no email found',
+];
+
 export class PlaywrightWorker {
   private context: BrowserContext | null = null;
+  private page: Page | null = null;
   private userDataDir: string;
 
   constructor() {
@@ -11,15 +33,15 @@ export class PlaywrightWorker {
   }
 
   /**
-   * Initializes the persistent Chrome browser instance.
+   * Initializes the persistent Chrome browser instance and persistent page tab.
    */
   public async init(): Promise<void> {
     if (this.context) return;
 
     try {
       this.context = await chromium.launchPersistentContext(this.userDataDir, {
-        headless: false, // Run headful to allow Cloudflare Turnstile to solve naturally or permit manual clicks
-        channel: 'chrome', // Use local system Google Chrome for authentic fingerprints
+        headless: false,
+        channel: 'chrome',
         viewport: { width: 1280, height: 800 },
         args: [
           '--disable-blink-features=AutomationControlled',
@@ -27,14 +49,14 @@ export class PlaywrightWorker {
         ]
       });
 
-      // Override navigator.webdriver flag in all tabs
       await this.context.addInitScript(() => {
         Object.defineProperty(navigator, 'webdriver', {
           get: () => undefined,
         });
       });
 
-      console.log('PlaywrightWorker: System Chrome browser initiated successfully.');
+      this.page = await this.context.newPage();
+      console.log('PlaywrightWorker: Browser and persistent tab initiated.');
     } catch (error) {
       console.error('PlaywrightWorker: Failed to initialize browser context:', error);
       throw error;
@@ -42,34 +64,55 @@ export class PlaywrightWorker {
   }
 
   /**
-   * Automated lookup for a single LinkedIn URL.
+   * Checks if a scraped "name" string is actually an error message from Mailmeteor.
+   */
+  private isErrorName(name: string): boolean {
+    const lower = name.toLowerCase();
+    return ERROR_NAME_PATTERNS.some((pattern) => lower.includes(pattern));
+  }
+
+  /**
+   * Checks if the error is specifically a rate limit.
+   */
+  private isRateLimitError(text: string): boolean {
+    const lower = text.toLowerCase();
+    return lower.includes('rate_limit') || lower.includes('rate limit');
+  }
+
+  /**
+   * Checks if the text indicates a legitimate "no data" response (not an error).
+   */
+  private isNoDataResponse(text: string): boolean {
+    const lower = text.toLowerCase();
+    return NO_DATA_PATTERNS.some((pattern) => lower.includes(pattern));
+  }
+
+  /**
+   * Automated lookup for a single LinkedIn URL using the persistent, cached tab.
    */
   public async extractLead(url: string): Promise<Lead> {
-    if (!this.context) {
+    if (!this.context || !this.page) {
       await this.init();
     }
 
-    const page = this.context!.pages().length > 0 ? this.context!.pages()[0] : await this.context!.newPage();
+    const activePage = this.page!;
     
     try {
       const targetUrl = encodeURIComponent(url);
       const queryUrl = `https://mailmeteor.com/tools/linkedin-email-finder?linkedin-url=${targetUrl}`;
       
-      console.log(`PlaywrightWorker: Navigating to ${queryUrl}`);
+      console.log(`PlaywrightWorker: Navigating for ${url}`);
       
-      await page.goto(queryUrl, { 
+      await activePage.goto(queryUrl, { 
         waitUntil: 'load', 
         timeout: 30000 
       });
 
-      // Wait for either the result card to be ready (non-loading state) or an error/Turnstile message to appear
-      console.log('PlaywrightWorker: Waiting for result to load or error to display...');
+      console.log('PlaywrightWorker: Waiting for result...');
       
-      const resultSelector = '.email-result-card';
-      const errorSelector = '.linkedin-email-finder__text';
-      
-      await page.waitForFunction(() => {
-        // 1. Success check: result card exists and name does NOT contain "searching" or empty
+      // Wait for either: a result card with text, an error message, or a timeout
+      await activePage.waitForFunction(() => {
+        // 1. Result card has populated text (could be real name OR error text like "Oops...")
         const card = document.querySelector('.email-result-card');
         if (card) {
           const nameEl = card.querySelector('h5.linkedin-email-finder__text');
@@ -79,7 +122,7 @@ export class PlaywrightWorker {
           }
         }
 
-        // 2. Error check: document text indicates Turnstile or unexpected failure
+        // 2. Body-level error messages
         const bodyText = document.body.innerText || '';
         if (bodyText.includes("Oops, it didn't work") || 
             bodyText.includes("unexpected error") || 
@@ -90,46 +133,70 @@ export class PlaywrightWorker {
         return false;
       }, undefined, { timeout: 30000 });
 
-      // Evaluate result on the page
-      const extractedData = await page.evaluate((selectors) => {
-        const card = document.querySelector(selectors.resultSelector);
+      // Extract data from the page
+      const extractedData = await activePage.evaluate(() => {
+        const card = document.querySelector('.email-result-card');
         
         if (card) {
           const nameEl = card.querySelector('h5.linkedin-email-finder__text');
           const nameText = nameEl ? nameEl.textContent?.trim() || null : null;
           
-          // Extra guard: make sure we didn't somehow grab a placeholder name
           if (nameText && !nameText.toLowerCase().includes('searching')) {
             const emailEl = card.querySelector('span.linkedin-email-finder__text.text-secondary');
             const companyImg = card.querySelector('span.position-text img.linkedin-email-finder-icon');
             const positionEl = card.querySelector('span.position-text');
             
             return {
-              success: true,
+              hasCard: true,
               name: nameText,
               email: emailEl ? emailEl.textContent?.trim() || null : null,
               company: companyImg ? companyImg.getAttribute('alt')?.trim() || null : null,
               jobTitle: positionEl ? positionEl.textContent?.trim() || null : null,
-              errorMsg: null
             };
           }
         }
 
-        // Error case: extract error message from error element or general text
-        const errorEl = document.querySelector(selectors.errorSelector);
-        const errorText = errorEl ? errorEl.textContent?.trim() || '' : '';
-        
+        // No valid card — grab any visible error text
+        const bodyText = document.body.innerText || '';
         return {
-          success: false,
+          hasCard: false,
           name: null,
           email: null,
           company: null,
           jobTitle: null,
-          errorMsg: errorText || 'Unknown error occurred'
+          bodySnippet: bodyText.substring(0, 500),
         };
-      }, { resultSelector, errorSelector });
+      });
 
-      if (extractedData.success) {
+      // ── CRITICAL: Check if the "name" is actually an error or no-data message ──
+      if (extractedData.hasCard && extractedData.name) {
+        // Check for "No results found" / "No email found" — legitimate empty result, don't retry
+        if (this.isNoDataResponse(extractedData.name)) {
+          console.log(`PlaywrightWorker: ℹ No data available for ${url} ("${extractedData.name}")`);
+          return {
+            name: null, company: null, jobTitle: null, email: null,
+            linkedinUrl: url, status: 'success',
+            error: 'No results found',
+            processedAt: new Date().toISOString()
+          };
+        }
+
+        // Check for rate limit or other real errors — these should be retried
+        if (this.isErrorName(extractedData.name)) {
+          const isRateLimit = this.isRateLimitError(extractedData.name);
+          const errorType = isRateLimit ? 'RATE_LIMIT' : 'SITE_ERROR';
+          console.error(`PlaywrightWorker: [${errorType}] Detected error in name field: "${extractedData.name}" for ${url}`);
+          
+          return {
+            name: null, company: null, jobTitle: null, email: null,
+            linkedinUrl: url, status: 'failed',
+            error: isRateLimit ? 'rate_limit' : `site_error: ${extractedData.name}`,
+            processedAt: new Date().toISOString()
+          };
+        }
+
+        // Genuine successful extraction
+        console.log(`PlaywrightWorker: ✓ Extracted "${extractedData.name}" for ${url}`);
         return {
           name: extractedData.name,
           company: extractedData.company,
@@ -141,21 +208,24 @@ export class PlaywrightWorker {
         };
       }
 
-      // Check if error is indeed "No email found" or a Turnstile block
-      const errMsg = extractedData.errorMsg || 'Unknown error occurred';
-      if (errMsg.toLowerCase().includes("oops") || errMsg.toLowerCase().includes("error") || errMsg.toLowerCase().includes("unexpected")) {
-        throw new Error(`Cloudflare or unexpected error from Mailmeteor: ${errMsg}`);
+      // No card found — check body for clues
+      const bodySnippet = (extractedData as any).bodySnippet || '';
+      if (this.isRateLimitError(bodySnippet)) {
+        console.error(`PlaywrightWorker: [RATE_LIMIT] Body text indicates rate limit for ${url}`);
+        return {
+          name: null, company: null, jobTitle: null, email: null,
+          linkedinUrl: url, status: 'failed',
+          error: 'rate_limit',
+          processedAt: new Date().toISOString()
+        };
       }
 
-      // Safe fallback - email not found
+      // Genuine "no results" scenario
+      console.log(`PlaywrightWorker: No data found for ${url}`);
       return {
-        name: null,
-        company: null,
-        jobTitle: null,
-        email: null,
-        linkedinUrl: url,
-        status: 'success', // Processed successfully but empty result
-        error: errMsg || 'Email not found',
+        name: null, company: null, jobTitle: null, email: null,
+        linkedinUrl: url, status: 'success',
+        error: 'No results found',
         processedAt: new Date().toISOString()
       };
 
@@ -163,12 +233,8 @@ export class PlaywrightWorker {
       console.error(`PlaywrightWorker: Extraction failed for ${url}:`, error.message);
       
       return {
-        name: null,
-        company: null,
-        jobTitle: null,
-        email: null,
-        linkedinUrl: url,
-        status: 'failed',
+        name: null, company: null, jobTitle: null, email: null,
+        linkedinUrl: url, status: 'failed',
         error: error.message || 'Timeout/Browser error',
         processedAt: new Date().toISOString()
       };
@@ -176,9 +242,13 @@ export class PlaywrightWorker {
   }
 
   /**
-   * Safely closes the browser context.
+   * Safely closes the browser context and page.
    */
   public async close(): Promise<void> {
+    if (this.page) {
+      try { await this.page.close(); } catch (e) { /* ignore */ }
+      this.page = null;
+    }
     if (this.context) {
       try {
         await this.context.close();

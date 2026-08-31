@@ -10,9 +10,9 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({ results }) => {
   const [copiedHeader, setCopiedHeader] = useState<string | null>(null);
   const [copiedCell, setCopiedCell] = useState<{ row: number; field: string } | null>(null);
 
-  // Filter out any results that are failed or don't have an email address
+  // Filter out only completely failed leads (include resolved profiles even if they don't have an email)
   const validResults = results.filter(
-    (lead) => lead.status === 'success' && lead.email && lead.email.trim() !== ''
+    (lead) => lead.status === 'success'
   );
 
   const filteredResults = validResults.filter((lead) => {
@@ -30,8 +30,9 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({ results }) => {
     const textToCopy = filteredResults
       .map((lead) => {
         const val = lead[field];
-        return val ? String(val) : '';
+        return val ? String(val).trim() : '';
       })
+      .filter((val) => val !== '')
       .join('\n');
 
     navigator.clipboard.writeText(textToCopy);
@@ -191,10 +192,17 @@ export const ResultsTable: React.FC<ResultsTableProps> = ({ results }) => {
                     {renderCellWithCopy('Profile', idx, 'linkedinUrl', true, lead.linkedinUrl, lead.linkedinUrl)}
                   </td>
                   <td className="py-3 px-4 text-right">
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 select-none">
-                      <span className="h-1 w-1 rounded-full bg-emerald-400" />
-                      Valid
-                    </span>
+                    {lead.email ? (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 select-none">
+                        <span className="h-1 w-1 rounded-full bg-emerald-400" />
+                        Valid
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 select-none">
+                        <span className="h-1 w-1 rounded-full bg-amber-400" />
+                        No Email
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))
