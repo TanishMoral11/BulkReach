@@ -14,6 +14,8 @@ export function useQueueEvents() {
   const [currentUrl, setCurrentUrl] = useState<string | null>(null);
   const [results, setResults] = useState<Lead[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [showErrorDialog, setShowErrorDialog] = useState<boolean>(false);
 
   /**
    * Performs an HTTP fetch to grab the latest full state from the server.
@@ -46,6 +48,8 @@ export function useQueueEvents() {
 
       eventSource.onopen = () => {
         setIsConnected(true);
+        setConnectionError(null);
+        setShowErrorDialog(false);
         console.log('useQueueEvents: SSE stream connected.');
       };
 
@@ -71,8 +75,11 @@ export function useQueueEvents() {
       };
 
       eventSource.onerror = (err) => {
-        console.error('useQueueEvents: SSE stream connection lost. Reconnecting...', err);
+        const errorMsg = 'useQueueEvents: SSE stream connection lost. Reconnecting...';
+        console.error(errorMsg, err);
         setIsConnected(false);
+        setConnectionError(errorMsg);
+        setShowErrorDialog(true);
         eventSource.close();
         // Reconnect after 3 seconds
         setTimeout(connectSSE, 3000);
@@ -88,12 +95,19 @@ export function useQueueEvents() {
     };
   }, []);
 
+  const dismissErrorDialog = () => {
+    setShowErrorDialog(false);
+  };
+
   return {
     status,
     stats,
     currentUrl,
     results,
     isConnected,
+    connectionError,
+    showErrorDialog,
+    dismissErrorDialog,
     refetch: fetchStatus
   };
 }

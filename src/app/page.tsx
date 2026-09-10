@@ -7,6 +7,7 @@ import { ControlPanel } from '@/components/ControlPanel';
 import { ExportPanel } from '@/components/ExportPanel';
 import { ProgressTracker } from '@/components/ProgressTracker';
 import { ResultsTable } from '@/components/ResultsTable';
+import { ConnectionErrorDialog } from '@/components/ConnectionErrorDialog';
 import { useQueueEvents } from '@/hooks/useQueueEvents';
 
 interface Toast {
@@ -16,7 +17,17 @@ interface Toast {
 }
 
 export default function Home() {
-  const { status, stats, currentUrl, results, isConnected } = useQueueEvents();
+  const {
+    status,
+    stats,
+    currentUrl,
+    results,
+    isConnected,
+    connectionError,
+    showErrorDialog,
+    dismissErrorDialog,
+    refetch
+  } = useQueueEvents();
   const [urlsToProcess, setUrlsToProcess] = useState<string[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -250,6 +261,14 @@ export default function Home() {
           </div>
         ))}
       </div>
+
+      {/* Connection Lost Error Dialog Modal */}
+      <ConnectionErrorDialog
+        isOpen={showErrorDialog}
+        onClose={dismissErrorDialog}
+        onRetry={refetch}
+        errorMessage={connectionError}
+      />
     </div>
   );
 }
